@@ -49,3 +49,57 @@ chmod -R 700 /data/coolify
 #### Example for enabling a System Unit File
 
 systemctl enable docker.service
+
+# Create systemd service for Coolify
+cat > /etc/systemd/system/coolify.service << 'EOF'
+[Unit]
+Description=Coolify Container Management
+After=docker.service network-online.target
+Requires=docker.service network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/bin/coolify-start
+ExecStop=/usr/local/bin/coolify-stop
+StandardOutput=journal
+StandardError=journal
+TimeoutStartSec=300
+TimeoutStopSec=120
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# Create startup script
+cat > /usr/local/bin/coolify-start << 'EOF'
+#!/bin/bash
+# Try docker compose (Docker CLI plugin) first, fall back to docker-compose
+if command -v docker &> /dev/null && docker compose version &> /dev/null; then
+    docker compose --env-file /data/coolify/source/.env -f /data/coolify/source/docker-compose.yml -f /data/coolify/source/docker-compose.prod.yml up -d --pull always --remove-orphans --force-recreate
+elif command -v docker-compose &> /dev/null; then
+    docker-compose --env-file /data/coolify/source/.env -f /data/coolify/source/docker-compose.yml -f /data/coolify/source/docker-compose.prod.yml up -d --pull always --remove-orphans --force-recreate
+else
+    echo "Error: Neither 'docker compose' nor 'docker-compose' command found"
+    exit 1
+fi
+EOF
+
+# Create stop script
+cat > /usr/local/bin/coolify-stop << 'EOF'
+#!/bin/bash
+# Try docker compose (Docker CLI plugin) first, fall back to docker-compose
+if command -v docker &> /dev/null && docker compose version &> /dev/null; then
+    docker compose --env-file /data/coolify/source/.env -f /data/coolify/source/docker-compose.yml -f /data/coolify/source/docker-compose.prod.yml down
+elif command -v docker-compose &> /dev/null; then
+    docker-compose --env-file /data/coolify/source/.env -f /data/coolify/source/docker-compose.yml -f /data/coolify/source/docker-compose.prod.yml down
+else
+    echo "Error: Neither 'docker compose' nor 'docker-compose' command found"
+    exit 1
+fi
+EOF
+
+chmod +x /usr/local/bin/coolify-start /usr/local/bin/coolify-stop
+
+# Enable the coolify service
+systemctl enable coolify.service
