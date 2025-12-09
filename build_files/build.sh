@@ -11,35 +11,30 @@ set -ouex pipefail
 
 dnf5 install -y curl docker-compose
 
-mkdir -p /var/opt/coolify/source
-mkdir -p /var/opt/coolify/ssh/keys
-mkdir -p /var/opt/coolify/ssh/mux
-mkdir -p /var/opt/coolify/applications
-mkdir -p /var/opt/coolify/databases
-mkdir -p /var/opt/coolify/backups
-mkdir -p /var/opt/coolify/services
-mkdir -p /var/opt/coolify/proxy/dynamic
-mkdir -p /var/opt/coolify/proxy
-mkdir -p /var/opt/coolify/webhooks-during-maintenance
+mkdir -p /data/coolify/{source,ssh,applications,databases,backups,services,proxy,webhooks-during-maintenance}
+mkdir -p /data/coolify/ssh/{keys,mux}
+mkdir -p /data/coolify/proxy/dynamic
 
-ssh-keygen -f /var/opt/coolify/ssh/keys/id.root@host.docker.internal -t ed25519 -N '' -C root@coolify
+ssh-keygen -f /data/coolify/ssh/keys/id.root@host.docker.internal -t ed25519 -N '' -C root@coolify
 
 mkdir -p /var/roothome/.ssh
-cat /var/opt/coolify/ssh/keys/id.root@host.docker.internal.pub >> /var/roothome/.ssh/authorized_keys
+cat /data/coolify/ssh/keys/id.root@host.docker.internal.pub >> /var/roothome/.ssh/authorized_keys
 chmod 600 /var/roothome/.ssh/authorized_keys
 
-curl -fsSL https://cdn.coollabs.io/coolify/docker-compose.yml -o /var/opt/coolify/source/docker-compose.yml
-curl -fsSL https://cdn.coollabs.io/coolify/docker-compose.prod.yml -o /var/opt/coolify/source/docker-compose.prod.yml
-curl -fsSL https://cdn.coollabs.io/coolify/.env.production -o /var/opt/coolify/source/.env
-curl -fsSL https://cdn.coollabs.io/coolify/upgrade.sh -o /var/opt/coolify/source/upgrade.sh
+curl -fsSL https://cdn.coollabs.io/coolify/docker-compose.yml -o /data/coolify/source/docker-compose.yml
+curl -fsSL https://cdn.coollabs.io/coolify/docker-compose.prod.yml -o /data/coolify/source/docker-compose.prod.yml
+curl -fsSL https://cdn.coollabs.io/coolify/.env.production -o /data/coolify/source/.env
+curl -fsSL https://cdn.coollabs.io/coolify/upgrade.sh -o /data/coolify/source/upgrade.sh
 
 # Create coolify user with UID 9999 if it doesn't exist
 if ! getent passwd 9999 > /dev/null; then
     useradd -u 9999 -r -s /sbin/nologin coolify
 fi
 
-chown -R 9999:root /var/opt/coolify
-chmod -R 700 /var/opt/coolify
+chown -R 9999:root /data/coolify
+chmod -R 700 /data/coolify
+
+systemctl enable docker.service
 
 # Create systemd service for Coolify (to be enabled on host)
 cat > /etc/systemd/system/coolify.service << 'EOF'
@@ -75,7 +70,7 @@ if command -v docker &> /dev/null; then
     fi
 fi
 
-cd /var/opt/coolify/source
+cd /data/coolify/source
 
 # Try docker compose (Docker CLI plugin) first, fall back to docker-compose
 if command -v docker &> /dev/null && docker compose version &> /dev/null; then
@@ -93,7 +88,7 @@ cat > /usr/bin/coolify-stop << 'EOF'
 #!/bin/bash
 # Stop Coolify using Docker Compose
 
-cd /var/opt/coolify/source
+cd /data/coolify/source
 
 # Try docker compose (Docker CLI plugin) first, fall back to docker-compose
 if command -v docker &> /dev/null && docker compose version &> /dev/null; then
