@@ -60,8 +60,8 @@ Requires=docker.service network-online.target
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecStart=/usr/local/bin/coolify-start
-ExecStop=/usr/local/bin/coolify-stop
+ExecStart=/usr/bin/coolify-start
+ExecStop=/usr/bin/coolify-stop
 StandardOutput=journal
 StandardError=journal
 TimeoutStartSec=300
@@ -72,7 +72,7 @@ WantedBy=multi-user.target
 EOF
 
 # Create startup script
-cat > /usr/local/bin/coolify-start << 'EOF'
+cat > /usr/bin/coolify-start << 'EOF'
 #!/bin/bash
 # Try docker compose (Docker CLI plugin) first, fall back to docker-compose
 if command -v docker &> /dev/null && docker compose version &> /dev/null; then
@@ -86,7 +86,7 @@ fi
 EOF
 
 # Create stop script
-cat > /usr/local/bin/coolify-stop << 'EOF'
+cat > /usr/bin/coolify-stop << 'EOF'
 #!/bin/bash
 # Try docker compose (Docker CLI plugin) first, fall back to docker-compose
 if command -v docker &> /dev/null && docker compose version &> /dev/null; then
@@ -99,7 +99,7 @@ else
 fi
 EOF
 
-chmod +x /usr/local/bin/coolify-start /usr/local/bin/coolify-stop
+chmod +x /usr/bin/coolify-start /usr/bin/coolify-stop
 
 # Enable the coolify service
 systemctl enable coolify.service
