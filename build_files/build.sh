@@ -11,32 +11,37 @@ set -ouex pipefail
 
 dnf5 install -y curl docker-compose
 
-mkdir -p /data/coolify/{source,ssh,applications,databases,backups,services,proxy,webhooks-during-maintenance}
-mkdir -p /data/coolify/ssh/{keys,mux}
-mkdir -p /data/coolify/proxy/dynamic
+mkdir -p /var/opt/coolify/source
+mkdir -p /var/opt/coolify/ssh/keys
+mkdir -p /var/opt/coolify/ssh/mux
+mkdir -p /var/opt/coolify/applications
+mkdir -p /var/opt/coolify/databases
+mkdir -p /var/opt/coolify/backups
+mkdir -p /var/opt/coolify/services
+mkdir -p /var/opt/coolify/proxy/dynamic
+mkdir -p /var/opt/coolify/proxy
+mkdir -p /var/opt/coolify/webhooks-during-maintenance
 
-ssh-keygen -f /data/coolify/ssh/keys/id.root@host.docker.internal -t ed25519 -N '' -C root@coolify
+ssh-keygen -f /var/opt/coolify/ssh/keys/id.root@host.docker.internal -t ed25519 -N '' -C root@coolify
 
 mkdir -p /var/roothome/.ssh
-cat /data/coolify/ssh/keys/id.root@host.docker.internal.pub >> /var/roothome/.ssh/authorized_keys
+cat /var/opt/coolify/ssh/keys/id.root@host.docker.internal.pub >> /var/roothome/.ssh/authorized_keys
 chmod 600 /var/roothome/.ssh/authorized_keys
 
-curl -fsSL https://cdn.coollabs.io/coolify/docker-compose.yml -o /data/coolify/source/docker-compose.yml
-curl -fsSL https://cdn.coollabs.io/coolify/docker-compose.prod.yml -o /data/coolify/source/docker-compose.prod.yml
-curl -fsSL https://cdn.coollabs.io/coolify/.env.production -o /data/coolify/source/.env
-curl -fsSL https://cdn.coollabs.io/coolify/upgrade.sh -o /data/coolify/source/upgrade.sh
+curl -fsSL https://cdn.coollabs.io/coolify/docker-compose.yml -o /var/opt/coolify/source/docker-compose.yml
+curl -fsSL https://cdn.coollabs.io/coolify/docker-compose.prod.yml -o /var/opt/coolify/source/docker-compose.prod.yml
+curl -fsSL https://cdn.coollabs.io/coolify/.env.production -o /var/opt/coolify/source/.env
+curl -fsSL https://cdn.coollabs.io/coolify/upgrade.sh -o /var/opt/coolify/source/upgrade.sh
 
 # Create coolify user with UID 9999 if it doesn't exist
 if ! getent passwd 9999 > /dev/null; then
     useradd -u 9999 -r -s /sbin/nologin coolify
 fi
 
-chown -R 9999:root /data/coolify
-chmod -R 700 /data/coolify
+chown -R 9999:root /var/opt/coolify
+chmod -R 700 /var/opt/coolify
 
-systemctl enable docker.service
-
-# Create systemd service for Coolify
+# Create systemd service for Coolify (to be enabled on host)
 cat > /etc/systemd/system/coolify.service << 'EOF'
 [Unit]
 Description=Coolify Container Management
@@ -57,28 +62,44 @@ TimeoutStopSec=120
 WantedBy=multi-user.target
 EOF
 
-# Create startup script
+# Create startup script (for host)
 cat > /usr/bin/coolify-start << 'EOF'
 #!/bin/bash
+# Start Coolify using Docker Compose
+
+# Create the coolify network if it doesn't exist
+if command -v docker &> /dev/null; then
+    if ! docker network inspect coolify >/dev/null 2>&1; then
+        echo "Creating Docker network 'coolify'..."
+        docker network create coolify
+    fi
+fi
+
+cd /var/opt/coolify/source
+
 # Try docker compose (Docker CLI plugin) first, fall back to docker-compose
 if command -v docker &> /dev/null && docker compose version &> /dev/null; then
-    docker compose --env-file /data/coolify/source/.env -f /data/coolify/source/docker-compose.yml -f /data/coolify/source/docker-compose.prod.yml up -d --pull always --remove-orphans --force-recreate
+    docker compose --env-file .env -f docker-compose.yml -f docker-compose.prod.yml up -d --pull always --remove-orphans --force-recreate
 elif command -v docker-compose &> /dev/null; then
-    docker-compose --env-file /data/coolify/source/.env -f /data/coolify/source/docker-compose.yml -f /data/coolify/source/docker-compose.prod.yml up -d --pull always --remove-orphans --force-recreate
+    docker-compose --env-file .env -f docker-compose.yml -f docker-compose.prod.yml up -d --pull always --remove-orphans --force-recreate
 else
     echo "Error: Neither 'docker compose' nor 'docker-compose' command found"
     exit 1
 fi
 EOF
 
-# Create stop script
+# Create stop script (for host)
 cat > /usr/bin/coolify-stop << 'EOF'
 #!/bin/bash
+# Stop Coolify using Docker Compose
+
+cd /var/opt/coolify/source
+
 # Try docker compose (Docker CLI plugin) first, fall back to docker-compose
 if command -v docker &> /dev/null && docker compose version &> /dev/null; then
-    docker compose --env-file /data/coolify/source/.env -f /data/coolify/source/docker-compose.yml -f /data/coolify/source/docker-compose.prod.yml down
+    docker compose --env-file .env -f docker-compose.yml -f docker-compose.prod.yml down
 elif command -v docker-compose &> /dev/null; then
-    docker-compose --env-file /data/coolify/source/.env -f /data/coolify/source/docker-compose.yml -f /data/coolify/source/docker-compose.prod.yml down
+    docker-compose --env-file .env -f docker-compose.yml -f docker-compose.prod.yml down
 else
     echo "Error: Neither 'docker compose' nor 'docker-compose' command found"
     exit 1
@@ -86,6 +107,3 @@ fi
 EOF
 
 chmod +x /usr/bin/coolify-start /usr/bin/coolify-stop
-
-# Enable the coolify service
-systemctl enable coolify.service

@@ -1,3 +1,23 @@
+# Coolify on uCore
+
+Coolify has been installed to /var/opt/coolify.
+
+To start Coolify on your host system:
+
+1. Ensure Docker is installed and running on your host
+2. Enable the Coolify service:
+   sudo systemctl enable --now coolify.service
+
+Files:
+- /var/opt/coolify/source/ - Coolify Docker Compose files
+- /var/opt/coolify/ssh/ - SSH keys for Coolify
+- /usr/bin/coolify-start - Startup script
+- /usr/bin/coolify-stop - Stop script
+- /etc/systemd/system/coolify.service - Systemd service
+
+The service will automatically create the 'coolify' Docker network
+and start all Coolify containers.
+
 # image-template
 
 This repository is meant to be a template for building your own custom [bootc](https://github.com/bootc-dev/bootc) image. This template is the recommended way to make customizations to any image published by the Universal Blue Project.
