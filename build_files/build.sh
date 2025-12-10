@@ -14,12 +14,25 @@ mkdir -p /data/coolify/{source,ssh,applications,databases,backups,services,proxy
 mkdir -p /data/coolify/ssh/{keys,mux}
 mkdir -p /data/coolify/proxy/dynamic
 
+# Generate an SSH key for Coolify to manage your server
+ssh-keygen -f /data/coolify/ssh/keys/id.root@host.docker.internal -t ed25519 -N '' -C root@coolify
+
+# Create .ssh directory in the actual root home location
+mkdir -p /var/roothome/.ssh
+cat /data/coolify/ssh/keys/id.root@host.docker.internal.pub >> /var/roothome/.ssh/authorized_keys
+chmod 600 /var/roothome/.ssh/authorized_keys
+
 ### Download Coolify Docker compose files
 CDN="https://cdn.coollabs.io/coolify"
 curl -fsSL -L $CDN/docker-compose.yml -o /data/coolify/source/docker-compose.yml
 curl -fsSL -L $CDN/docker-compose.prod.yml -o /data/coolify/source/docker-compose.prod.yml
 curl -fsSL -L $CDN/.env.production -o /data/coolify/source/.env.production
 curl -fsSL -L $CDN/upgrade.sh -o /data/coolify/source/upgrade.sh
+
+
+# Set the correct permissions for the Coolify files and directories
+chown -R 9999:root /data/coolify
+chmod -R 700 /data/coolify
 
 ### Create .env file with generated values during build
 if [ -f /data/coolify/source/.env.production ]; then
@@ -35,35 +48,12 @@ if [ -f /data/coolify/source/.env.production ]; then
     # Create .env file with generated values
     cat > /data/coolify/source/.env << EOF
 APP_ID=$APP_ID
-APP_NAME=Coolify
 APP_KEY=$APP_KEY
-APP_ENV=production
-APP_PORT=8000
-
-DB_USERNAME=coolify
 DB_PASSWORD=$DB_PASSWORD
-DB_DATABASE=coolify
-
 REDIS_PASSWORD=$REDIS_PASSWORD
-
 PUSHER_APP_ID=$PUSHER_APP_ID
 PUSHER_APP_KEY=$PUSHER_APP_KEY
 PUSHER_APP_SECRET=$PUSHER_APP_SECRET
-
-ROOT_USERNAME=
-ROOT_USER_EMAIL=
-ROOT_USER_PASSWORD=
-
-REGISTRY_URL=ghcr.io
-LATEST_IMAGE=latest
-SOKETI_PORT=6001
-SOKETI_DEBUG=false
-
-PHP_MEMORY_LIMIT=256M
-PHP_FPM_PM_CONTROL=dynamic
-PHP_FPM_PM_START_SERVERS=1
-PHP_FPM_PM_MIN_SPARE_SERVERS=1
-PHP_FPM_PM_MAX_SPARE_SERVERS=10
 EOF
 fi
 
@@ -72,9 +62,9 @@ cat > /usr/bin/coolify-start << 'EOF'
 #!/bin/bash
 set -e
 
-cd /data/coolify/source
-# Use both docker-compose files: base definitions + production overrides
-docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+docker network create --attachable coolify
+
+docker compose --env-file /data/coolify/source/.env -f /data/coolify/source/docker-compose.yml -f /data/coolify/source/docker-compose.prod.yml up -d --pull always --remove-orphans --force-recreate
 
 EOF
 
