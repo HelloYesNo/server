@@ -111,7 +111,9 @@ if ! groups $USER | grep -q docker; then
 fi
 
 # Create network only if it doesn't exist
-docker network create --attachable coolify 2>/dev/null || true
+if ! docker network ls | grep -q coolify; then
+    docker network create --attachable coolify
+fi
 
 # Start Coolify
 cd /data/coolify/source
