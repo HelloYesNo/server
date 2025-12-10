@@ -54,6 +54,18 @@ REDIS_PASSWORD=$REDIS_PASSWORD
 PUSHER_APP_ID=$PUSHER_APP_ID
 PUSHER_APP_KEY=$PUSHER_APP_KEY
 PUSHER_APP_SECRET=$PUSHER_APP_SECRET
+
+REGISTRY_URL=ghcr.io
+LATEST_IMAGE=latest
+SOKETI_PORT=6001
+SOKETI_DEBUG=false
+
+PHP_MEMORY_LIMIT=256M
+PHP_FPM_PM_CONTROL=dynamic
+PHP_FPM_PM_START_SERVERS=1
+PHP_FPM_PM_MIN_SPARE_SERVERS=1
+PHP_FPM_PM_MAX_SPARE_SERVERS=10
+
 EOF
 fi
 
@@ -61,10 +73,14 @@ fi
 cat > /usr/bin/coolify-start << 'EOF'
 #!/bin/bash
 set -e
+if [ docker network ls | grep -q coolify ]; then
+    echo "Coolify network already exists"
+else
+    docker network create --attachable coolify
+fi
 
-docker network create --attachable coolify
-
-docker compose --env-file /data/coolify/source/.env -f /data/coolify/source/docker-compose.yml -f /data/coolify/source/docker-compose.prod.yml up -d --pull always --remove-orphans --force-recreate
+cd /data/coolify/source
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 
 EOF
 
