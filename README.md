@@ -2,7 +2,7 @@
 
 To start Coolify on your host system:
 
-1. Start the install script with `coolify-install`
+1. Start the install script with `coolify-start`
 
 This will install coolify and start it.
 
