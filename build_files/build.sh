@@ -17,10 +17,10 @@ mkdir -p /data/coolify/proxy/dynamic
 ### Generate an SSH key for Coolify to manage your server
 ssh-keygen -f /data/coolify/ssh/keys/id.root@host.docker.internal -t ed25519 -N '' -C root@coolify
 
-### For immutable distros, create SSH config in system location
-mkdir -p /etc/ssh/authorized_keys.d/
-cat /data/coolify/ssh/keys/id.root@host.docker.internal.pub >> /etc/ssh/authorized_keys.d/coolify
-chmod 600 /etc/ssh/authorized_keys.d/coolify
+### Create SSH key for Coolify (will be used by Coolify during setup)
+# The key is generated in /data/coolify/ssh/keys/
+# /root/.ssh is symlinked to /var/roothome/.ssh (writable) in Containerfile
+echo "SSH key generated for Coolify"
 
 ### Download Coolify Docker compose files
 CDN="https://cdn.coollabs.io/coolify"
@@ -88,50 +88,11 @@ cat > /usr/bin/coolify-start << 'EOF'
 #!/bin/bash
 set -e
 
-# Configure SSH for Coolify
-echo "Configuring SSH for Coolify..."
-
-# Create ~/.ssh directory and symlink authorized_keys to system location
-sudo mkdir -p ~/.ssh
-sudo chmod 700 ~/.ssh
-sudo ln -sf /etc/ssh/authorized_keys.d/coolify ~/.ssh/authorized_keys
-
-# Create backup of sshd_config
-sudo cp /etc/ssh/sshd_config /etc/ssh/sshd_config.backup
-
-# Add or update AuthorizedKeysFile directive
-if grep -q "^AuthorizedKeysFile" /etc/ssh/sshd_config; then
-    # Update existing AuthorizedKeysFile line
-    sudo sed -i 's|^AuthorizedKeysFile.*|AuthorizedKeysFile .ssh/authorized_keys /etc/ssh/authorized_keys.d/%u|' /etc/ssh/sshd_config
-elif grep -q "^#AuthorizedKeysFile" /etc/ssh/sshd_config; then
-    # Uncomment and update commented AuthorizedKeysFile line
-    sudo sed -i 's|^#AuthorizedKeysFile.*|AuthorizedKeysFile .ssh/authorized_keys /etc/ssh/authorized_keys.d/%u|' /etc/ssh/sshd_config
-else
-    # Add new AuthorizedKeysFile line
-    echo "AuthorizedKeysFile .ssh/authorized_keys /etc/ssh/authorized_keys.d/%u" | sudo tee -a /etc/ssh/sshd_config
-fi
-
-# Ensure the authorized_keys.d directory exists
-sudo mkdir -p /etc/ssh/authorized_keys.d
-sudo chmod 755 /etc/ssh/authorized_keys.d
-
-# Restart SSH service
-sudo systemctl restart sshd
-echo "SSH configured successfully!"
-
 # Ensure Docker is running
 if ! systemctl is-active --quiet docker; then
     echo "Starting Docker service..."
     sudo systemctl start docker
     sudo systemctl enable docker
-fi
-
-# Ensure user can access Docker socket
-if ! groups $USER | grep -q docker; then
-    echo "Adding user to docker group..."
-    sudo usermod -aG docker $USER
-    echo "Please log out and back in for changes to take effect"
-    exit 1
 fi
 
 # Create network only if it doesn't exist

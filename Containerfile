@@ -25,6 +25,14 @@ FROM ghcr.io/ublue-os/ucore:stable-nvidia
 
 # RUN rm /opt && mkdir /opt
 
+### Make /root/.ssh mutable for Coolify
+## Coolify needs to write SSH keys to /root/.ssh/authorized_keys during setup.
+## On immutable distros, we make this writable by symlinking to /var/roothome/.ssh
+RUN rm -rf /root/.ssh && \
+    mkdir -p /var/roothome/.ssh && \
+    ln -s /var/roothome/.ssh /root/.ssh && \
+    chmod 700 /var/roothome/.ssh
+
 ### MODIFICATIONS
 ## make modifications desired in your image and install packages by modifying the build.sh script
 ## the following RUN directive does all the things required to run "build.sh" as recommended.
