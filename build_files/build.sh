@@ -37,9 +37,12 @@ if [ -f /data/coolify/source/.env.production ]; then
 APP_ID=$APP_ID
 APP_NAME=Coolify
 APP_KEY=$APP_KEY
+APP_ENV=production
+APP_PORT=8000
 
 DB_USERNAME=coolify
 DB_PASSWORD=$DB_PASSWORD
+DB_DATABASE=coolify
 
 REDIS_PASSWORD=$REDIS_PASSWORD
 
@@ -52,6 +55,15 @@ ROOT_USER_EMAIL=
 ROOT_USER_PASSWORD=
 
 REGISTRY_URL=ghcr.io
+LATEST_IMAGE=latest
+SOKETI_PORT=6001
+SOKETI_DEBUG=false
+
+PHP_MEMORY_LIMIT=256M
+PHP_FPM_PM_CONTROL=dynamic
+PHP_FPM_PM_START_SERVERS=1
+PHP_FPM_PM_MIN_SPARE_SERVERS=1
+PHP_FPM_PM_MAX_SPARE_SERVERS=10
 EOF
 fi
 
@@ -61,7 +73,8 @@ cat > /usr/bin/coolify-start << 'EOF'
 set -e
 
 cd /data/coolify/source
-docker compose up -d
+# Use both docker-compose files: base definitions + production overrides
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 
 EOF
 
