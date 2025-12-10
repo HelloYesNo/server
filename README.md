@@ -2,12 +2,9 @@
 
 To start Coolify on your host system:
 
-1. Ensure Docker is installed and running on your host
-2. Enable the Coolify service:
-   sudo systemctl enable --now coolify.service
+1. Start the install script with `coolify-install`
 
-The service will automatically create the 'coolify' Docker network
-and start all Coolify containers.
+This will install coolify and start it.
 
 # image-template
 
