@@ -88,12 +88,36 @@ cat > /usr/bin/coolify-start << 'EOF'
 #!/bin/bash
 set -e
 
-# Configure SSH if not already configured
-if ! grep -q "AuthorizedKeysFile.*/etc/ssh/authorized_keys.d" /etc/ssh/sshd_config; then
-    echo "Configuring SSH for Coolify..."
-    sudo sed -i 's|^#*AuthorizedKeysFile.*|AuthorizedKeysFile .ssh/authorized_keys /etc/ssh/authorized_keys.d/%u|' /etc/ssh/sshd_config
-    sudo systemctl restart sshd
+# Configure SSH for Coolify
+echo "Configuring SSH for Coolify..."
+
+# Create ~/.ssh directory and symlink authorized_keys to system location
+sudo mkdir -p ~/.ssh
+sudo chmod 700 ~/.ssh
+sudo ln -sf /etc/ssh/authorized_keys.d/coolify ~/.ssh/authorized_keys
+
+# Create backup of sshd_config
+sudo cp /etc/ssh/sshd_config /etc/ssh/sshd_config.backup
+
+# Add or update AuthorizedKeysFile directive
+if grep -q "^AuthorizedKeysFile" /etc/ssh/sshd_config; then
+    # Update existing AuthorizedKeysFile line
+    sudo sed -i 's|^AuthorizedKeysFile.*|AuthorizedKeysFile .ssh/authorized_keys /etc/ssh/authorized_keys.d/%u|' /etc/ssh/sshd_config
+elif grep -q "^#AuthorizedKeysFile" /etc/ssh/sshd_config; then
+    # Uncomment and update commented AuthorizedKeysFile line
+    sudo sed -i 's|^#AuthorizedKeysFile.*|AuthorizedKeysFile .ssh/authorized_keys /etc/ssh/authorized_keys.d/%u|' /etc/ssh/sshd_config
+else
+    # Add new AuthorizedKeysFile line
+    echo "AuthorizedKeysFile .ssh/authorized_keys /etc/ssh/authorized_keys.d/%u" | sudo tee -a /etc/ssh/sshd_config
 fi
+
+# Ensure the authorized_keys.d directory exists
+sudo mkdir -p /etc/ssh/authorized_keys.d
+sudo chmod 755 /etc/ssh/authorized_keys.d
+
+# Restart SSH service
+sudo systemctl restart sshd
+echo "SSH configured successfully!"
 
 # Ensure Docker is running
 if ! systemctl is-active --quiet docker; then
