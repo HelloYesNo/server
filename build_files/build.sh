@@ -14,10 +14,10 @@ mkdir -p /data/coolify/{source,ssh,applications,databases,backups,services,proxy
 mkdir -p /data/coolify/ssh/{keys,mux}
 mkdir -p /data/coolify/proxy/dynamic
 
-# Generate an SSH key for Coolify to manage your server
+### Generate an SSH key for Coolify to manage your server
 ssh-keygen -f /data/coolify/ssh/keys/id.root@host.docker.internal -t ed25519 -N '' -C root@coolify
 
-# Create .ssh directory in the actual root home location
+### Create .ssh directory in the actual root home location
 mkdir -p /var/roothome/.ssh
 cat /data/coolify/ssh/keys/id.root@host.docker.internal.pub >> /var/roothome/.ssh/authorized_keys
 chmod 600 /var/roothome/.ssh/authorized_keys
@@ -47,13 +47,27 @@ if [ -f /data/coolify/source/.env.production ]; then
 
     # Create .env file with generated values
     cat > /data/coolify/source/.env << EOF
+APP_NAME=Coolify
 APP_ID=$APP_ID
 APP_KEY=$APP_KEY
+APP_ENV=production
+APP_PORT=8000
+
+
+DB_CONNECTION=pgsql
+DB_HOST=postgres
+DB_PORT=5432
+DB_USERNAME=coolify
+DB_DATABASE=coolify
 DB_PASSWORD=$DB_PASSWORD
 REDIS_PASSWORD=$REDIS_PASSWORD
 PUSHER_APP_ID=$PUSHER_APP_ID
 PUSHER_APP_KEY=$PUSHER_APP_KEY
 PUSHER_APP_SECRET=$PUSHER_APP_SECRET
+
+ROOT_USERNAME=
+ROOT_USER_EMAIL=
+ROOT_USER_PASSWORD=
 
 REGISTRY_URL=ghcr.io
 LATEST_IMAGE=latest
