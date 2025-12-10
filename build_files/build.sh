@@ -87,11 +87,8 @@ fi
 cat > /usr/bin/coolify-start << 'EOF'
 #!/bin/bash
 set -e
-if [ docker network ls | grep -q coolify ]; then
-    echo "Coolify network already exists"
-else
-    docker network create --attachable coolify
-fi
+
+docker network create --attachable coolify
 
 cd /data/coolify/source
 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
