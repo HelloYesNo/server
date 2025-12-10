@@ -17,10 +17,10 @@ mkdir -p /data/coolify/proxy/dynamic
 ### Generate an SSH key for Coolify to manage your server
 ssh-keygen -f /data/coolify/ssh/keys/id.root@host.docker.internal -t ed25519 -N '' -C root@coolify
 
-### Create .ssh directory in the actual root home location
-mkdir -p /var/roothome/.ssh
-cat /data/coolify/ssh/keys/id.root@host.docker.internal.pub >> /var/roothome/.ssh/authorized_keys
-chmod 600 /var/roothome/.ssh/authorized_keys
+### For immutable distros, create SSH config in system location
+mkdir -p /etc/ssh/authorized_keys.d/
+cat /data/coolify/ssh/keys/id.root@host.docker.internal.pub >> /etc/ssh/authorized_keys.d/coolify
+chmod 600 /etc/ssh/authorized_keys.d/coolify
 
 ### Download Coolify Docker compose files
 CDN="https://cdn.coollabs.io/coolify"
@@ -88,8 +88,32 @@ cat > /usr/bin/coolify-start << 'EOF'
 #!/bin/bash
 set -e
 
-docker network create --attachable coolify
+# Configure SSH if not already configured
+if ! grep -q "AuthorizedKeysFile.*/etc/ssh/authorized_keys.d" /etc/ssh/sshd_config; then
+    echo "Configuring SSH for Coolify..."
+    sudo sed -i 's|^#*AuthorizedKeysFile.*|AuthorizedKeysFile .ssh/authorized_keys /etc/ssh/authorized_keys.d/%u|' /etc/ssh/sshd_config
+    sudo systemctl restart sshd
+fi
 
+# Ensure Docker is running
+if ! systemctl is-active --quiet docker; then
+    echo "Starting Docker service..."
+    sudo systemctl start docker
+    sudo systemctl enable docker
+fi
+
+# Ensure user can access Docker socket
+if ! groups $USER | grep -q docker; then
+    echo "Adding user to docker group..."
+    sudo usermod -aG docker $USER
+    echo "Please log out and back in for changes to take effect"
+    exit 1
+fi
+
+# Create network only if it doesn't exist
+docker network create --attachable coolify 2>/dev/null || true
+
+# Start Coolify
 cd /data/coolify/source
 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 
