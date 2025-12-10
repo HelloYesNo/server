@@ -21,29 +21,44 @@ curl -fsSL -L $CDN/docker-compose.prod.yml -o /data/coolify/source/docker-compos
 curl -fsSL -L $CDN/.env.production -o /data/coolify/source/.env.production
 curl -fsSL -L $CDN/upgrade.sh -o /data/coolify/source/upgrade.sh
 
-### Create .env file from .env.production
+### Create .env file with generated values during build
 if [ -f /data/coolify/source/.env.production ]; then
-    cp /data/coolify/source/.env.production /data/coolify/source/.env
+    # Generate random values during build
+    APP_ID=$(openssl rand -hex 16)
+    APP_KEY="base64:$(openssl rand -base64 32)"
+    DB_PASSWORD=$(openssl rand -base64 32)
+    REDIS_PASSWORD=$(openssl rand -base64 32)
+    PUSHER_APP_ID=$(openssl rand -hex 32)
+    PUSHER_APP_KEY=$(openssl rand -hex 32)
+    PUSHER_APP_SECRET=$(openssl rand -hex 32)
+
+    # Create .env file with generated values
+    cat > /data/coolify/source/.env << EOF
+APP_ID=$APP_ID
+APP_NAME=Coolify
+APP_KEY=$APP_KEY
+
+DB_USERNAME=coolify
+DB_PASSWORD=$DB_PASSWORD
+
+REDIS_PASSWORD=$REDIS_PASSWORD
+
+PUSHER_APP_ID=$PUSHER_APP_ID
+PUSHER_APP_KEY=$PUSHER_APP_KEY
+PUSHER_APP_SECRET=$PUSHER_APP_SECRET
+
+ROOT_USERNAME=
+ROOT_USER_EMAIL=
+ROOT_USER_PASSWORD=
+
+REGISTRY_URL=ghcr.io
+EOF
 fi
 
 ### Create install script
 cat > /usr/bin/coolify-start << 'EOF'
 #!/bin/bash
 set -e
-
-# Generate random secrets if .env doesn't exist or is empty
-if [ ! -f /data/coolify/source/.env ] || [ ! -s /data/coolify/source/.env ]; then
-    echo "Generating Coolify configuration..."
-    cat > /data/coolify/source/.env << 'CONFIGEOF'
-APP_ID=$(openssl rand -hex 16)
-APP_KEY=base64:$(openssl rand -base64 32)
-DB_PASSWORD=$(openssl rand -base64 32)
-REDIS_PASSWORD=$(openssl rand -base64 32)
-PUSHER_APP_ID=$(openssl rand -hex 32)
-PUSHER_APP_KEY=$(openssl rand -hex 32)
-PUSHER_APP_SECRET=$(openssl rand -hex 32)
-CONFIGEOF
-fi
 
 cd /data/coolify/source
 docker compose up -d
