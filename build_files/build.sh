@@ -9,17 +9,18 @@ set -ouex pipefail
 # List of rpmfusion packages can be found here:
 # https://mirrors.rpmfusion.org/mirrorlist?path=free/fedora/updates/39/x86_64/repoview/index.html&protocol=https&redirect=1
 
+# Install Coolify
+curl -fsSL https://github.com/HelloYesNo/coolify/tree/v4.x/scripts/install.sh | sudo bash
 
 ### Create install script
-cat > /usr/bin/coolify-install << 'EOF'
+cat > /usr/bin/coolify-start << 'EOF'
 #!/bin/bash
 set -e
 
-# Install script
-
-curl -fsSL https://cdn.coollabs.io/coolify/install.sh | sudo bash
+cd /data/coolify/source
+docker compose up -d
 
 EOF
 
 ### Make scripts executable
-chmod +x /usr/bin/coolify-install
+chmod +x /usr/bin/coolify-start
