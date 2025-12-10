@@ -88,6 +88,12 @@ cat > /usr/bin/coolify-start << 'EOF'
 #!/bin/bash
 set -e
 
+# Fix Coolify permissions before starting
+echo "Checking Coolify permissions..."
+if [ -f /usr/local/bin/fix-coolify-permissions.sh ]; then
+    /usr/local/bin/fix-coolify-permissions.sh
+fi
+
 # Ensure Docker is running
 if ! systemctl is-active --quiet docker; then
     echo "Starting Docker service..."

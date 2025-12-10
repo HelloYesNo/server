@@ -33,6 +33,12 @@ RUN rm -rf /root/.ssh && \
     ln -s /var/roothome/.ssh /root/.ssh && \
     chmod 700 /var/roothome/.ssh
 
+### Copy fix-permissions script
+COPY build_files/fix-coolify-permissions.sh /usr/local/bin/fix-coolify-permissions.sh
+RUN chmod +x /usr/local/bin/fix-coolify-permissions.sh
+
+
+
 ### MODIFICATIONS
 ## make modifications desired in your image and install packages by modifying the build.sh script
 ## the following RUN directive does all the things required to run "build.sh" as recommended.
