@@ -170,7 +170,7 @@ _build-bib $target_image $tag $type $config: (_rootful_load_image target_image t
 
     sudo podman run \
       --rm \
-      -it \
+      \
       --privileged \
       --pull=newer \
       --net=host \

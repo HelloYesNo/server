@@ -2,8 +2,8 @@
 FROM scratch AS ctx
 COPY build_files /
 
-# Base Image - Fedora bootc for mutable system
-FROM quay.io/fedora/fedora-bootc:42
+# Base Image - Universal Blue base for immutable system
+FROM ghcr.io/ublue-os/base-main:latest
 
 ### MODIFICATIONS
 ## make modifications desired in your image and install packages by modifying the build.sh script
