@@ -45,6 +45,9 @@ mkdir -p /etc/ssh/sshd_config.d
 cat > /etc/ssh/sshd_config.d/coolify.conf << 'EOF'
 # Use writable location for authorized_keys (immutable OS compatible)
 AuthorizedKeysFile /var/lib/coolify/ssh/authorized_keys/%u
+# Use writable location for host keys (immutable OS compatible)
+HostKey /var/lib/coolify/ssh/keys/ssh_host_ed25519_key
+HostKey /var/lib/coolify/ssh/keys/ssh_host_rsa_key
 # Allow root login with key-based authentication
 PermitRootLogin prohibit-password
 # Disable password authentication
@@ -62,18 +65,25 @@ chmod 755 /var/lib/coolify/ssh/authorized_keys
 
 ### Generate SSH key pair for Coolify host access
 echo "Generating SSH key pair for Coolify..."
-mkdir -p /data/coolify/ssh/keys
-ssh-keygen -t ed25519 -a 100 -f /data/coolify/ssh/keys/id.root@host.docker.internal -q -N "" -C "coolify-host-access"
-chown -R 9999:root /data/coolify
+mkdir -p /var/lib/coolify/ssh/keys
+ssh-keygen -t ed25519 -a 100 -f /var/lib/coolify/ssh/keys/id.root@host.docker.internal -q -N "" -C "coolify-host-access"
+
+# Generate SSH host keys in writable location (immutable OS compatible)
+ssh-keygen -t ed25519 -f /var/lib/coolify/ssh/keys/ssh_host_ed25519_key -N "" -q
+ssh-keygen -t rsa -b 4096 -f /var/lib/coolify/ssh/keys/ssh_host_rsa_key -N "" -q
+chmod 600 /var/lib/coolify/ssh/keys/ssh_host_*
+
+chown root:root /var/lib/coolify/ssh/keys/ssh_host_ed25519_key /var/lib/coolify/ssh/keys/ssh_host_ed25519_key.pub /var/lib/coolify/ssh/keys/ssh_host_rsa_key /var/lib/coolify/ssh/keys/ssh_host_rsa_key.pub
 
 # Add Coolify's public key to authorized_keys location
-cat /data/coolify/ssh/keys/id.root@host.docker.internal.pub > /var/lib/coolify/ssh/authorized_keys/root
+cat /var/lib/coolify/ssh/keys/id.root@host.docker.internal.pub > /var/lib/coolify/ssh/authorized_keys/root
 chmod 644 /var/lib/coolify/ssh/authorized_keys/root
+chown root:root /var/lib/coolify/ssh/authorized_keys/root
 
 # Also add to /root/.ssh/authorized_keys for backward compatibility (if overlay permits)
 if touch /root/.ssh/test 2>/dev/null; then
     mkdir -p /root/.ssh
-    cat /data/coolify/ssh/keys/id.root@host.docker.internal.pub >> /root/.ssh/authorized_keys
+    cat /var/lib/coolify/ssh/keys/id.root@host.docker.internal.pub >> /root/.ssh/authorized_keys
     chmod 600 /root/.ssh/authorized_keys
     chmod 700 /root/.ssh
     rm -f /root/.ssh/test
@@ -127,12 +137,27 @@ curl -fsSL -L https://cdn.coollabs.io/coolify/.env.production -o /usr/share/cool
 curl -fsSL -L https://cdn.coollabs.io/coolify/upgrade.sh -o /usr/share/coolify/upgrade.sh
 chmod +x /usr/share/coolify/upgrade.sh
 
+# Create symlink from /data/coolify to writable location (immutable OS compatible)
+echo "Creating symlink /data/coolify -> /var/lib/coolify..."
+mkdir -p /var/lib/coolify
+mkdir -p /data
+ln -sfn /var/lib/coolify /data/coolify
+
+# Copy Coolify assets to writable data directory (immutable OS compatible)
+echo "Copying Coolify assets to /var/lib/coolify/source..."
+mkdir -p /var/lib/coolify/source
+cp /usr/share/coolify/docker-compose.yml /var/lib/coolify/source/
+cp /usr/share/coolify/docker-compose.prod.yml /var/lib/coolify/source/
+cp /usr/share/coolify/.env.production /var/lib/coolify/source/
+cp /usr/share/coolify/upgrade.sh /var/lib/coolify/source/
+chmod +x /var/lib/coolify/source/upgrade.sh
+
 ### Create data directories with correct permissions
 echo "Creating Coolify data directories..."
-mkdir -p /data/coolify/{source,ssh,applications,databases,backups,services,proxy,sentinel}
-mkdir -p /data/coolify/ssh/{keys,mux}
-mkdir -p /data/coolify/proxy/dynamic
-chown -R 9999:root /data/coolify
+mkdir -p /var/lib/coolify/{source,ssh,applications,databases,backups,services,proxy,sentinel}
+mkdir -p /var/lib/coolify/ssh/{keys,mux}
+mkdir -p /var/lib/coolify/proxy/dynamic
+chown -R 9999:root /var/lib/coolify
 chmod -R 700 /data/coolify
 
 ### Create startup script that skips package installation
@@ -142,6 +167,8 @@ cat > /usr/bin/coolify-start << 'EOF'
 set -euo pipefail
 
 echo "Starting Coolify setup..."
+date
+touch /var/lib/coolify/.startup-complete
 
 # Ensure Docker is running
 if ! systemctl is-active --quiet docker; then
@@ -159,54 +186,68 @@ fi
 if ! systemctl is-active --quiet firewalld; then
     echo "Starting firewalld..."
     systemctl start firewalld
+    # Wait for firewalld to be ready (max 30 seconds)
+    echo "Waiting for firewalld to be ready..."
+    for i in {1..30}; do
+        if firewall-cmd --state 2>/dev/null; then
+            echo "firewalld is ready."
+            break
+        fi
+        sleep 1
+    done
 fi
 
-# Add firewall rules if not already present
-if ! firewall-cmd --list-services --permanent 2>/dev/null | grep -q '\bssh\b'; then
-    echo "Adding SSH service to firewall..."
-    firewall-cmd --permanent --add-service=ssh
+# Add firewall rules if not already present (runtime only, immutable OS compatible)
+if ! firewall-cmd --list-services 2>/dev/null | grep -q '\bssh\b'; then
+    echo "Adding SSH service to firewall (runtime)..."
+    firewall-cmd --add-service=ssh
 fi
 
-if ! firewall-cmd --list-ports --permanent 2>/dev/null | grep -q '\b8000/tcp\b'; then
-    echo "Adding port 8000/tcp to firewall..."
-    firewall-cmd --permanent --add-port=8000/tcp
+if ! firewall-cmd --list-ports 2>/dev/null | grep -q '\b8000/tcp\b'; then
+    echo "Adding port 8000/tcp to firewall (runtime)..."
+    firewall-cmd --add-port=8000/tcp
 fi
 
-# Reload firewall to apply changes
-echo "Reloading firewall..."
-firewall-cmd --reload
+# Ensure /data/coolify symlink exists (immutable OS compatible)
+if [ ! -L /data/coolify ]; then
+    echo "Creating /data/coolify symlink to /var/lib/coolify..."
+    mkdir -p /data
+    ln -sfn /var/lib/coolify /data/coolify
+fi
 
-# Copy Coolify assets if /data/coolify/source is empty
+# Verify Coolify assets are present (should have been copied during build)
 if [ ! -f /data/coolify/source/docker-compose.yml ]; then
-    echo "Copying Coolify assets to /data/coolify/source..."
-    cp /usr/share/coolify/docker-compose.yml /data/coolify/source/
-    cp /usr/share/coolify/docker-compose.prod.yml /data/coolify/source/
-    cp /usr/share/coolify/.env.production /data/coolify/source/
-    cp /usr/share/coolify/upgrade.sh /data/coolify/source/
-    chmod +x /data/coolify/source/upgrade.sh
+    # Try fallback to /var/lib/coolify
+    if [ -f /var/lib/coolify/source/docker-compose.yml ]; then
+        echo "Coolify assets found in /var/lib/coolify/source, ensuring symlink..."
+        mkdir -p /data
+        ln -sfn /var/lib/coolify /data/coolify
+    else
+        echo "ERROR: Coolify assets not found. They should have been copied during build."
+        exit 1
+    fi
 fi
-
-# Set ownership of /data/coolify
-chown -R 9999:root /data/coolify
-chmod -R 700 /data/coolify
+echo "Coolify assets verified in /data/coolify/source."
+# Ensure upgrade script is executable
+chmod +x /data/coolify/source/upgrade.sh 2>/dev/null || true
 
 # Generate environment variables if not present
 ENV_FILE="/data/coolify/source/.env"
 if [ ! -f "$ENV_FILE" ]; then
     echo "Creating initial .env file..."
     cp /data/coolify/source/.env.production "$ENV_FILE"
-    
+
     # Generate secure secrets
     openssl rand -hex 16 > /tmp/app_id
     openssl rand -base64 32 > /tmp/app_key
     openssl rand -base64 32 > /tmp/db_password
     openssl rand -base64 32 > /tmp/redis_password
-    
+
     sed -i "s|^APP_ID=.*|APP_ID=$(cat /tmp/app_id)|" "$ENV_FILE"
     sed -i "s|^APP_KEY=.*|APP_KEY=base64:$(cat /tmp/app_key)|" "$ENV_FILE"
     sed -i "s|^DB_PASSWORD=.*|DB_PASSWORD=$(cat /tmp/db_password)|" "$ENV_FILE"
     sed -i "s|^REDIS_PASSWORD=.*|REDIS_PASSWORD=$(cat /tmp/redis_password)|" "$ENV_FILE"
-    
+
     rm -f /tmp/app_id /tmp/app_key /tmp/db_password /tmp/redis_password
 fi
 

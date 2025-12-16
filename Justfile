@@ -250,6 +250,7 @@ _run-vm $target_image $tag $type $config:
     run_args+=(--rm --privileged)
     run_args+=(--pull=newer)
     run_args+=(--publish "127.0.0.1:${port}:8006")
+    run_args+=(--publish "127.0.0.1:2222:22")
     run_args+=(--env "CPU_CORES=4")
     run_args+=(--env "RAM_SIZE=8G")
     run_args+=(--env "DISK_SIZE=64G")
