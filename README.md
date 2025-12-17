@@ -1,10 +1,95 @@
-# Coolify on uCore
+# Coolify on Universal Blue
 
-To start Coolify on your host system:
+A minimal Universal Blue bootc image with Coolify auto-start capability.
 
-1. Start the install script with `coolify-start`
+## Features
 
-This will install coolify and start it.
+- **Minimal image** - Coolify assets downloaded at runtime, not baked in
+- **Unique SSH keys** - Generated per instance for improved security
+- **Immutable OS compatible** - All writes go to `/var/lib/coolify/`
+- **Easy management** - Use `ujust` for installation, start, stop, logs, etc.
+- **Dual installation paths**:
+  - **Host automation**: `just install-coolify` (SSH into VM)
+  - **VM internal**: `install-coolify` (via console/SSH)
+- **Auto-start on boot** - Once installed, Coolify starts automatically
+
+## Quick Start
+
+1. **Build the image**:
+   ```bash
+   just rebuild-qcow2
+   ```
+
+2. **Start the VM**:
+   ```bash
+   just run-vm-qcow2
+   ```
+   This exposes:
+   - SSH on port 2222
+   - Web console on port 8006+
+
+3. **Install Coolify** (choose one method):
+   - **Host automation** (recommended):
+     ```bash
+     just install-coolify
+     ```
+   - **VM internal**:
+     SSH into the VM (`ssh -p 2222 root@localhost`) and run:
+     ```bash
+     install-coolify
+     ```
+
+4. **Access Coolify**:
+   - Web UI: `http://localhost:8000`
+   - SSH: `ssh -p 2222 root@localhost`
+
+## Coolify Management with `ujust`
+
+After installation, use `ujust` to manage Coolify:
+
+| Command | Description |
+|---------|-------------|
+| `ujust install` | Install Coolify (download assets, generate SSH keys) |
+| `ujust start` | Start Coolify containers |
+| `ujust stop` | Stop Coolify containers |
+| `ujust restart` | Restart Coolify containers |
+| `ujust status` | Show Coolify container status |
+| `ujust logs` | Follow Coolify container logs |
+| `ujust upgrade` | Upgrade Coolify to latest version |
+| `ujust backup` | Backup Coolify data |
+| `ujust restore <file>` | Restore Coolify from backup |
+| `ujust ssh-keys` | Show SSH host key fingerprints |
+
+Example:
+```bash
+ujust status
+ujust logs
+```
+
+## Architecture
+
+This image uses **Option C: Minimal Image + ujust Runtime Installation**:
+
+- **Build time**: Only creates directory structure and installs management scripts
+- **First boot**: `install-coolify` downloads latest Coolify, generates unique SSH keys
+- **Subsequent boots**: `coolify-start.service` auto-starts Coolify if installed
+- **Management**: `ujust` wrapper provides easy command interface
+
+## Security Notes
+
+- SSH host keys are unique per instance (generated at installation)
+- Your SSH public key is added for VM access (from `/tmp/coolify-ssh/id_ed25519_new2`)
+- Firewall configured to allow SSH (port 22) and Coolify (port 8000)
+- Root login only via SSH key authentication
+
+## Troubleshooting
+
+- **Coolify not starting**: Check `ujust status` and `ujust logs`
+- **SSH connection refused**: Ensure VM is running (`ss -tunalp | grep :2222`)
+- **Installation fails**: Check network connectivity; script downloads from Coolify CDN
+- **Permission errors**: Ensure `/var/lib/coolify` has correct ownership (9999:root)
+
+---
 
 # image-template
 

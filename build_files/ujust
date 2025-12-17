@@ -1,0 +1,27 @@
+#!/bin/bash
+# ujust - Coolify management wrapper for Universal Blue
+# Runs just commands from /var/lib/coolify/.justfile
+#
+# Usage: ujust <command> [args...]
+
+JUSTFILE="/var/lib/coolify/.justfile"
+
+# Check if just is available
+if ! command -v just >/dev/null 2>&1; then
+    echo "Error: 'just' command not found. Please install just."
+    exit 1
+fi
+
+# Check if Coolify justfile exists
+if [ ! -f "$JUSTFILE" ]; then
+    echo "Error: Coolify management justfile not found at $JUSTFILE"
+    echo ""
+    echo "Coolify may not be installed yet. Install it with:"
+    echo "  install-coolify"
+    echo ""
+    echo "After installation, the justfile will be available."
+    exit 1
+fi
+
+# Run just with the coolify justfile
+exec just --justfile "$JUSTFILE" "$@"

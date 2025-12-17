@@ -34,7 +34,7 @@ dnf remove -y podman-docker 2>/dev/null || true
 echo "Installing required packages..."
 dnf install -y curl wget git jq openssl openssh-server \
                docker-ce docker-ce-cli containerd.io docker-compose-plugin \
-               firewalld
+               firewalld just
 
 ### Clean up DNF cache
 dnf clean all
@@ -111,6 +111,12 @@ echo "Installing Coolify installation script..."
 cp /ctx/install-coolify.sh /usr/bin/install-coolify
 chmod +x /usr/bin/install-coolify
 
+### Install Coolify management tools
+echo "Installing Coolify management tools..."
+cp /ctx/coolify.just /var/lib/coolify/.justfile
+cp /ctx/ujust /usr/bin/ujust
+chmod +x /usr/bin/ujust
+
 ### Create startup script that skips package installation
 echo "Creating Coolify startup script..."
 cat > /usr/bin/coolify-start << 'EOF'
@@ -126,6 +132,8 @@ if [ ! -f /var/lib/coolify/.installed ]; then
     echo ""
     echo "To install Coolify, run:"
     echo "  install-coolify"
+    echo ""
+    echo "After installation, use 'ujust' for management (start, stop, logs, etc)."
     echo ""
     echo "This will download Coolify assets, generate SSH keys, and start Coolify."
     echo "Exiting cleanly (Coolify not installed)."
@@ -265,6 +273,7 @@ echo ""
 echo "After booting the system:"
 echo "1. SSH into the system (port 2222)"
 echo "2. Run 'install-coolify' to download and install Coolify"
-echo "3. Coolify will auto-start on subsequent boots"
+echo "3. After installation, use 'ujust' for management (start, stop, logs, etc.)"
+echo "4. Coolify will auto-start on subsequent boots"
 echo ""
 echo "You can also manually run: coolify-start (checks if Coolify is installed)"

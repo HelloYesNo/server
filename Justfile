@@ -1,4 +1,4 @@
-export image_name := env("IMAGE_NAME", "coolify-ublue") # output image name, usually same as repo name, change as needed
+export image_name := env("IMAGE_NAME", "coolify-ublue")
 export default_tag := env("DEFAULT_TAG", "latest")
 export bib_image := env("BIB_IMAGE", "quay.io/centos-bootc/bootc-image-builder:latest")
 
@@ -299,16 +299,16 @@ spawn-vm rebuild="0" type="qcow2" ram="6G":
 install-coolify:
     #!/usr/bin/env bash
     set -euo pipefail
-    
+
     SSH_KEY="/tmp/coolify-ssh/id_ed25519_new2"
-    
+
     # Check if SSH key exists
     if [ ! -f "$SSH_KEY" ]; then
         echo "ERROR: SSH key not found at $SSH_KEY"
         echo "Please generate SSH keys first or update the path in this recipe."
         exit 1
     fi
-    
+
     # Check if VM is running (port 2222)
     if ! ss -tunalp | grep -q ':2222'; then
         echo "VM is not running on port 2222."
@@ -322,12 +322,12 @@ install-coolify:
         echo "  just install-coolify"
         exit 1
     fi
-    
+
     echo "VM detected on port 2222. Installing Coolify..."
     echo "This will SSH into the VM and run 'install-coolify'."
     echo "You may be prompted to accept the host key."
     echo ""
-    
+
     # SSH into VM and run install-coolify
     ssh -i "$SSH_KEY" \
         -p 2222 \
@@ -336,7 +336,6 @@ install-coolify:
         -o LogLevel=ERROR \
         root@localhost \
         "install-coolify"
-
 
 # Runs shell check on all Bash scripts
 lint:
