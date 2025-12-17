@@ -34,7 +34,7 @@ dnf remove -y podman-docker 2>/dev/null || true
 echo "Installing required packages..."
 dnf install -y curl wget git jq openssl openssh-server \
                docker-ce docker-ce-cli containerd.io docker-compose-plugin \
-               firewalld just
+               firewalld just distrobox podman
 
 ### Clean up DNF cache
 dnf clean all
@@ -43,8 +43,8 @@ dnf clean all
 echo "Configuring SSH daemon..."
 mkdir -p /etc/ssh/sshd_config.d
 cat > /etc/ssh/sshd_config.d/coolify.conf << 'EOF'
-# Use writable location for authorized_keys (immutable OS compatible)
-AuthorizedKeysFile /var/lib/coolify/ssh/authorized_keys/%u
+# Use standard location for authorized_keys (compatible with immutable OS via /root symlink)
+AuthorizedKeysFile /root/.ssh/authorized_keys
 # Use writable location for host keys (immutable OS compatible)
 HostKey /var/lib/coolify/ssh/keys/ssh_host_ed25519_key
 HostKey /var/lib/coolify/ssh/keys/ssh_host_rsa_key
@@ -59,12 +59,18 @@ systemctl enable sshd
 
 ### Set up writable directories for SSH (keys will be generated at runtime)
 echo "Creating writable SSH directory structure..."
-mkdir -p /var/lib/coolify/ssh/{authorized_keys,keys,mux}
+mkdir -p /var/lib/coolify/ssh/{keys,mux}
 chmod 755 /var/lib/coolify/ssh
-chmod 755 /var/lib/coolify/ssh/authorized_keys
 
-echo "SSH directories created. SSH keys will be generated at runtime by install-coolify."
-echo "User SSH key will be added at runtime by install-coolify."
+### Set up standard SSH directory for authorized_keys
+echo "Setting up SSH authorized_keys..."
+mkdir -p /root/.ssh
+chmod 700 /root/.ssh
+echo "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIL/gvaviFLLtZu2tRR6zEeYf4JhHARkuygogQvjnzX/b" > /root/.ssh/authorized_keys
+chmod 600 /root/.ssh/authorized_keys
+
+echo "SSH directories created. SSH host keys will be generated at runtime by sshd."
+echo "User SSH key has been added to /root/.ssh/authorized_keys."
 
 ### Configure Docker daemon
 echo "Configuring Docker daemon..."
@@ -91,7 +97,7 @@ systemctl enable firewalld
 
 ### Create minimal directory structure for Coolify (assets will be downloaded at runtime)
 echo "Creating minimal directory structure for Coolify..."
-mkdir -p /var/lib/coolify/{source,ssh/{keys,mux,authorized_keys},applications,databases,backups,services,proxy/dynamic,sentinel}
+mkdir -p /var/lib/coolify/{source,ssh/{keys,mux},applications,databases,backups,services,proxy/dynamic,sentinel}
 mkdir -p /data
 
 # Create symlink from /data/coolify to writable location (immutable OS compatible)
@@ -102,7 +108,6 @@ ln -sfn /var/lib/coolify /data/coolify
 chown -R 9999:root /var/lib/coolify
 chmod -R 700 /data/coolify
 chmod 755 /var/lib/coolify/ssh
-chmod 755 /var/lib/coolify/ssh/authorized_keys
 
 echo "Coolify directories created. Assets will be downloaded at runtime by install-coolify."
 
@@ -117,163 +122,77 @@ cp /ctx/coolify.just /var/lib/coolify/.justfile
 cp /ctx/ujust /usr/bin/ujust
 chmod +x /usr/bin/ujust
 
+### Set up Coolify Distrobox container
+echo "Setting up Coolify Distrobox container..."
+# Copy distrobox container definition
+mkdir -p /etc/distrobox
+cp /ctx/coolify-distrobox.json /etc/distrobox/coolify.json
+# Copy container installation script
+cp /ctx/install-coolify-container /usr/bin/install-coolify-container
+chmod +x /usr/bin/install-coolify-container
+# Install systemd service for auto-starting distrobox container
+cp /ctx/coolify-distrobox.service /etc/systemd/system/coolify-distrobox.service
+systemctl enable coolify-distrobox.service
+
 ### Create startup script that skips package installation
 echo "Creating Coolify startup script..."
 cat > /usr/bin/coolify-start << 'EOF'
 #!/bin/bash
 set -euo pipefail
 
-echo "=== Coolify Startup Script ==="
+echo "=== Coolify Distrobox Management Script ==="
 date
 
-# Check if Coolify is installed
-if [ ! -f /var/lib/coolify/.installed ]; then
-    echo "Coolify is not installed."
+# Check if distrobox container exists
+if ! distrobox list | grep -q '^coolify\s'; then
+    echo "Coolify distrobox container not found."
     echo ""
-    echo "To install Coolify, run:"
-    echo "  install-coolify"
+    echo "To set up Coolify:"
+    echo "1. Create and enter distrobox container: distrobox enter coolify"
+    echo "2. Inside container, install Coolify: install-coolify-container"
+    echo "3. Exit container - Coolify will auto-start on subsequent boots via systemd"
     echo ""
-    echo "After installation, use 'ujust' for management (start, stop, logs, etc)."
-    echo ""
-    echo "This will download Coolify assets, generate SSH keys, and start Coolify."
-    echo "Exiting cleanly (Coolify not installed)."
+    echo "Exiting cleanly (Coolify container not set up)."
     exit 0
 fi
 
-echo "Coolify is installed. Starting services..."
-
-# Ensure Docker is running
-if ! systemctl is-active --quiet docker; then
-    echo "Starting Docker daemon..."
-    systemctl start docker
+echo "Coolify distrobox container found."
+echo "Checking if container is running..."
+if distrobox list | grep -q '^coolify\s.*running'; then
+    echo "Container is already running."
+else
+    echo "Starting container..."
+    distrobox-start coolify
 fi
-
-# Ensure SSH daemon is running
-if ! systemctl is-active --quiet sshd; then
-    echo "Starting SSH daemon..."
-    systemctl start sshd
-fi
-
-# Configure firewall (ensure ports are open)
-if ! systemctl is-active --quiet firewalld; then
-    echo "Starting firewalld..."
-    systemctl start firewalld
-    # Wait for firewalld to be ready (max 30 seconds)
-    echo "Waiting for firewalld to be ready..."
-    for i in {1..30}; do
-        if firewall-cmd --state 2>/dev/null; then
-            echo "firewalld is ready."
-            break
-        fi
-        sleep 1
-    done
-fi
-
-# Add firewall rules if not already present (runtime only, immutable OS compatible)
-if ! firewall-cmd --list-services 2>/dev/null | grep -q '\bssh\b'; then
-    echo "Adding SSH service to firewall (runtime)..."
-    firewall-cmd --add-service=ssh
-fi
-
-if ! firewall-cmd --list-ports 2>/dev/null | grep -q '\b8000/tcp\b'; then
-    echo "Adding port 8000/tcp to firewall (runtime)..."
-    firewall-cmd --add-port=8000/tcp
-fi
-
-# Ensure /data/coolify symlink exists (immutable OS compatible)
-if [ ! -L /data/coolify ]; then
-    echo "Creating /data/coolify symlink to /var/lib/coolify..."
-    mkdir -p /data
-    ln -sfn /var/lib/coolify /data/coolify
-fi
-
-# Verify Coolify assets are present
-if [ ! -f /data/coolify/source/docker-compose.yml ]; then
-    echo "ERROR: Coolify assets not found in /data/coolify/source/"
-    echo "Coolify may not be properly installed. Try running: install-coolify"
-    exit 1
-fi
-
-echo "Coolify assets verified in /data/coolify/source."
-
-# Generate environment variables if not present
-ENV_FILE="/data/coolify/source/.env"
-if [ ! -f "$ENV_FILE" ]; then
-    echo "Creating initial .env file..."
-    cp /data/coolify/source/.env.production "$ENV_FILE"
-
-    # Generate secure secrets
-    openssl rand -hex 16 > /tmp/app_id
-    openssl rand -base64 32 > /tmp/app_key
-    openssl rand -base64 32 > /tmp/db_password
-    openssl rand -base64 32 > /tmp/redis_password
-
-    sed -i "s|^APP_ID=.*|APP_ID=$(cat /tmp/app_id)|" "$ENV_FILE"
-    sed -i "s|^APP_KEY=.*|APP_KEY=base64:$(cat /tmp/app_key)|" "$ENV_FILE"
-    sed -i "s|^DB_PASSWORD=.*|DB_PASSWORD=$(cat /tmp/db_password)|" "$ENV_FILE"
-    sed -i "s|^REDIS_PASSWORD=.*|REDIS_PASSWORD=$(cat /tmp/redis_password)|" "$ENV_FILE"
-
-    rm -f /tmp/app_id /tmp/app_key /tmp/db_password /tmp/redis_password
-fi
-
-# Ensure Coolify network exists
-if ! docker network inspect coolify >/dev/null 2>&1; then
-    echo "Creating Coolify Docker network..."
-    if ! docker network create --attachable --ipv6 coolify 2>/dev/null; then
-        echo "Failed to create coolify network with ipv6. Trying without ipv6..."
-        docker network create --attachable coolify 2>/dev/null
-    fi
-fi
-
-echo "Starting Coolify containers..."
-cd /data/coolify/source
-./upgrade.sh
 
 echo ""
 echo "================================================"
-echo "Coolify startup complete!"
+echo "Coolify distrobox container management:"
 echo ""
-echo "Coolify should now be accessible at:"
-echo "  http://$(hostname -I | awk '{print $1}'):8000"
+echo "Coolify should be accessible at:"
+echo "  http://localhost:8000"
 echo ""
-echo "To check container status: docker ps"
-echo "To view logs: docker logs coolify"
+echo "To enter container: distrobox enter coolify"
+echo "To view container status: distrobox list"
+echo "To stop container: distrobox-stop coolify"
+echo "To restart container: distrobox-stop coolify && distrobox-start coolify"
 echo "================================================"
 EOF
 
 ### Make script executable
 chmod +x /usr/bin/coolify-start
 
-### Create systemd service for auto-start
-echo "Creating Coolify auto-start service..."
-cat > /etc/systemd/system/coolify-start.service << 'EOF'
-[Unit]
-Description=Coolify Startup Service
-After=docker.service sshd.service network-online.target
-Wants=network-online.target
-Requires=docker.service
 
-[Service]
-Type=oneshot
-ExecStart=/usr/bin/coolify-start
-RemainAfterExit=yes
-StandardOutput=journal
-StandardError=journal
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-systemctl enable coolify-start.service
 
 echo "Build completed successfully!"
 echo ""
-echo "Minimal Coolify image created."
+echo "Coolify on Universal Blue (Distrobox edition) image created."
 echo ""
 echo "After booting the system:"
-echo "1. SSH into the system (port 2222)"
-echo "2. Run 'install-coolify' to download and install Coolify"
-echo "3. After installation, use 'ujust' for management (start, stop, logs, etc.)"
-echo "4. Coolify will auto-start on subsequent boots"
+echo "1. SSH into the system (port 2222) using your SSH key"
+echo "2. Create and enter Coolify container: distrobox enter coolify"
+echo "3. Inside container, install Coolify: install-coolify-container"
+echo "4. Exit container - Coolify will auto-start on subsequent boots"
 echo ""
-echo "You can also manually run: coolify-start (checks if Coolify is installed)"
+echo "You can also manually manage the container: coolify-start"
+echo "Or check container status: distrobox list"

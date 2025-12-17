@@ -16,8 +16,15 @@ fi
 if [ ! -f "$JUSTFILE" ]; then
     echo "Error: Coolify management justfile not found at $JUSTFILE"
     echo ""
-    echo "Coolify may not be installed yet. Install it with:"
-    echo "  install-coolify"
+    echo "Coolify may not be installed yet."
+    echo ""
+    echo "To install Coolify:"
+    echo "  1. Enter the Coolify distrobox container:"
+    echo "     distrobox enter coolify"
+    echo "  2. Inside container, run:"
+    echo "     install-coolify-container"
+    echo ""
+    echo "Or from host: distrobox run coolify install-coolify-container"
     echo ""
     echo "After installation, the justfile will be available."
     exit 1

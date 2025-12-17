@@ -1,0 +1,19 @@
+[Unit]
+Description=Coolify Distrobox Container
+After=docker.service network-online.target
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/distrobox-start coolify
+ExecStop=/usr/bin/distrobox-stop coolify
+StandardOutput=journal
+StandardError=journal
+
+# Give time for container to start Coolify
+ExecStartPost=/bin/sleep 10
+
+[Install]
+WantedBy=multi-user.target

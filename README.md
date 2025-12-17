@@ -1,17 +1,15 @@
-# Coolify on Universal Blue
+# Coolify on Universal Blue (Distrobox Edition)
 
-A minimal Universal Blue bootc image with Coolify auto-start capability.
+A Universal Blue bootc image with Coolify running inside a Distrobox container for full mutable environment on immutable OS.
 
 ## Features
 
-- **Minimal image** - Coolify assets downloaded at runtime, not baked in
-- **Unique SSH keys** - Generated per instance for improved security
-- **Immutable OS compatible** - All writes go to `/var/lib/coolify/`
-- **Easy management** - Use `ujust` for installation, start, stop, logs, etc.
-- **Dual installation paths**:
-  - **Host automation**: `just install-coolify` (SSH into VM)
-  - **VM internal**: `install-coolify` (via console/SSH)
-- **Auto-start on boot** - Once installed, Coolify starts automatically
+- **Distrobox-based** - Coolify runs inside a mutable container, host remains immutable
+- **Host Docker integration** - Container shares host Docker socket (`/var/run/docker.sock`)
+- **Auto-start** - Systemd service auto-starts distrobox container on boot
+- **Immutable OS compatible** - No host filesystem modifications for Coolify
+- **Easy installation** - One-command setup via `just install-coolify`
+- **Standard SSH** - Uses `/root/.ssh/authorized_keys` for VM access
 
 ## Quick Start
 
@@ -25,7 +23,7 @@ A minimal Universal Blue bootc image with Coolify auto-start capability.
    just run-vm-qcow2
    ```
    This exposes:
-   - SSH on port 2222
+   - SSH on port 2222 (use your SSH key)
    - Web console on port 8006+
 
 3. **Install Coolify** (choose one method):
@@ -33,61 +31,94 @@ A minimal Universal Blue bootc image with Coolify auto-start capability.
      ```bash
      just install-coolify
      ```
-   - **VM internal**:
+     This will create the distrobox container and install Coolify inside it.
+   
+   - **Manual installation**:
      SSH into the VM (`ssh -p 2222 root@localhost`) and run:
      ```bash
-     install-coolify
+     distrobox enter coolify
+     # Inside container:
+     install-coolify-container
+     exit
      ```
 
 4. **Access Coolify**:
    - Web UI: `http://localhost:8000`
    - SSH: `ssh -p 2222 root@localhost`
 
-## Coolify Management with `ujust`
+## Coolify Management
 
-After installation, use `ujust` to manage Coolify:
-
+### Container Management (Host)
 | Command | Description |
 |---------|-------------|
-| `ujust install` | Install Coolify (download assets, generate SSH keys) |
-| `ujust start` | Start Coolify containers |
-| `ujust stop` | Stop Coolify containers |
-| `ujust restart` | Restart Coolify containers |
-| `ujust status` | Show Coolify container status |
-| `ujust logs` | Follow Coolify container logs |
-| `ujust upgrade` | Upgrade Coolify to latest version |
-| `ujust backup` | Backup Coolify data |
-| `ujust restore <file>` | Restore Coolify from backup |
-| `ujust ssh-keys` | Show SSH host key fingerprints |
+| `coolify-start` | Start/check Coolify distrobox container |
+| `distrobox list` | List containers (see Coolify status) |
+| `distrobox enter coolify` | Enter Coolify container shell |
+| `distrobox-stop coolify` | Stop Coolify container |
+| `distrobox-start coolify` | Start Coolify container |
 
-Example:
+### Inside Container Management
+Once inside the container (`distrobox enter coolify`), you can use standard Docker commands:
 ```bash
-ujust status
-ujust logs
+docker ps                         # Check Coolify containers
+docker logs coolify               # View Coolify logs
+docker compose -f /var/lib/coolify/source/docker-compose.yml up -d  # Restart
 ```
 
 ## Architecture
 
-This image uses **Option C: Minimal Image + ujust Runtime Installation**:
+This image uses **Distrobox Container Approach**:
 
-- **Build time**: Only creates directory structure and installs management scripts
-- **First boot**: `install-coolify` downloads latest Coolify, generates unique SSH keys
-- **Subsequent boots**: `coolify-start.service` auto-starts Coolify if installed
-- **Management**: `ujust` wrapper provides easy command interface
+- **Host (Immutable)**: Docker daemon, SSH, firewall, distrobox runtime
+- **Container (Mutable)**: Fedora-based distrobox with Coolify + Docker client
+- **Shared resources**:
+  - Docker socket: Container manages host Docker containers
+  - Data volume: `/var/lib/coolify` persists Coolify data
+  - Network: Container port 8000 mapped to host port 8000
+- **Auto-start**: `coolify-distrobox.service` starts container on boot
 
 ## Security Notes
 
-- SSH host keys are unique per instance (generated at installation)
-- Your SSH public key is added for VM access (from `/tmp/coolify-ssh/id_ed25519_new2`)
-- Firewall configured to allow SSH (port 22) and Coolify (port 8000)
+- SSH uses standard `/root/.ssh/authorized_keys` (your key baked into image)
+- Host SSH keys generated at first boot in `/var/lib/coolify/ssh/keys/`
+- Firewall allows SSH (port 22) and Coolify (port 8000)
 - Root login only via SSH key authentication
+- Container runs as non-root user (UID 9999) with Docker socket access
 
 ## Troubleshooting
 
-- **Coolify not starting**: Check `ujust status` and `ujust logs`
+- **Coolify not accessible**: Check `distrobox list` - container should be running
+- **Container not starting**: Check `systemctl status coolify-distrobox.service`
 - **SSH connection refused**: Ensure VM is running (`ss -tunalp | grep :2222`)
-- **Installation fails**: Check network connectivity; script downloads from Coolify CDN
-- **Permission errors**: Ensure `/var/lib/coolify` has correct ownership (9999:root)
+- **Installation fails**: Check network connectivity; container downloads from Coolify CDN
+- **Docker permission errors**: Ensure container can access `/var/run/docker.sock`
+
+## Advanced Usage
+
+### Reinstall Coolify
+```bash
+# Enter container
+distrobox enter coolify
+# Remove installation marker
+rm /var/lib/coolify/.installed
+# Reinstall
+install-coolify-container
+```
+
+### Backup Coolify Data
+```bash
+# From host, backup the shared volume
+tar -czf coolify-backup.tar.gz -C /var/lib/coolify .
+```
+
+### Update Coolify
+```bash
+# Enter container
+distrobox enter coolify
+# Run upgrade script
+cd /var/lib/coolify/source
+./upgrade.sh
+```
 
 ---
 

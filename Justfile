@@ -42,7 +42,7 @@ clean:
     rm -f previous.manifest.json
     rm -f changelog.md
     rm -f output.env
-    rm -f output/
+    rm -rf output/
 
 # Sudo Clean Repo
 [group('Utility')]
@@ -323,19 +323,22 @@ install-coolify:
         exit 1
     fi
 
-    echo "VM detected on port 2222. Installing Coolify..."
-    echo "This will SSH into the VM and run 'install-coolify'."
+    echo "VM detected on port 2222. Installing Coolify via Distrobox..."
+    echo "This will:"
+    echo "1. SSH into the VM"
+    echo "2. Create Coolify distrobox container (if not exists)"
+    echo "3. Run Coolify installation inside container"
     echo "You may be prompted to accept the host key."
     echo ""
 
-    # SSH into VM and run install-coolify
+    # SSH into VM and set up Coolify via distrobox
     ssh -i "$SSH_KEY" \
         -p 2222 \
         -o StrictHostKeyChecking=no \
         -o UserKnownHostsFile=/dev/null \
         -o LogLevel=ERROR \
         root@localhost \
-        "install-coolify"
+        "if ! distrobox list | grep -q '^coolify\s'; then distrobox create coolify --yes; fi && distrobox run coolify install-coolify-container"
 
 # Runs shell check on all Bash scripts
 lint:
