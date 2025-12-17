@@ -57,14 +57,53 @@ EOF
 # Enable sshd (but don't start at build time)
 systemctl enable sshd
 
-### Set up writable directories for SSH (keys will be generated at runtime)
+### Set up writable directories for SSH authorized_keys
 echo "Creating writable SSH directory structure..."
-mkdir -p /var/lib/coolify/ssh/{authorized_keys,keys,mux}
+mkdir -p /var/lib/coolify/ssh/authorized_keys
 chmod 755 /var/lib/coolify/ssh
 chmod 755 /var/lib/coolify/ssh/authorized_keys
 
-echo "SSH directories created. SSH keys will be generated at runtime by install-coolify."
-echo "User SSH key will be added at runtime by install-coolify."
+### Generate SSH key pair for Coolify host access
+echo "Generating SSH key pair for Coolify..."
+mkdir -p /var/lib/coolify/ssh/keys
+ssh-keygen -t ed25519 -a 100 -f /var/lib/coolify/ssh/keys/id.root@host.docker.internal -q -N "" -C "coolify-host-access"
+
+# Generate SSH host keys in writable location (immutable OS compatible)
+ssh-keygen -t ed25519 -f /var/lib/coolify/ssh/keys/ssh_host_ed25519_key -N "" -q
+ssh-keygen -t rsa -b 4096 -f /var/lib/coolify/ssh/keys/ssh_host_rsa_key -N "" -q
+chmod 600 /var/lib/coolify/ssh/keys/ssh_host_*
+
+chown root:root /var/lib/coolify/ssh/keys/ssh_host_ed25519_key /var/lib/coolify/ssh/keys/ssh_host_ed25519_key.pub /var/lib/coolify/ssh/keys/ssh_host_rsa_key /var/lib/coolify/ssh/keys/ssh_host_rsa_key.pub
+
+# Add Coolify's public key to authorized_keys location
+cat /var/lib/coolify/ssh/keys/id.root@host.docker.internal.pub > /var/lib/coolify/ssh/authorized_keys/root
+chmod 644 /var/lib/coolify/ssh/authorized_keys/root
+chown root:root /var/lib/coolify/ssh/authorized_keys/root
+
+# Also add to /root/.ssh/authorized_keys for backward compatibility (if overlay permits)
+if touch /root/.ssh/test 2>/dev/null; then
+    mkdir -p /root/.ssh
+    cat /var/lib/coolify/ssh/keys/id.root@host.docker.internal.pub >> /root/.ssh/authorized_keys
+    chmod 600 /root/.ssh/authorized_keys
+    chmod 700 /root/.ssh
+    rm -f /root/.ssh/test
+    echo "Added Coolify SSH key to /root/.ssh/authorized_keys"
+else
+    echo "Skipping /root/.ssh (read-only filesystem)"
+fi
+
+### Add user's public SSH key
+echo "Adding user's public SSH key..."
+USER_KEY="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIL/gvaviFLLtZu2tRR6zEeYf4JhHARkuygogQvjnzX/b"
+echo "$USER_KEY" >> /var/lib/coolify/ssh/authorized_keys/root
+if touch /root/.ssh/test 2>/dev/null; then
+    echo "$USER_KEY" >> /root/.ssh/authorized_keys
+    rm -f /root/.ssh/test
+    echo "User's SSH key added to /root/.ssh/authorized_keys"
+else
+    echo "User's SSH key added to writable location only (/var/lib/coolify/ssh/authorized_keys/root)"
+fi
+echo "User's SSH key added successfully."
 
 ### Configure Docker daemon
 echo "Configuring Docker daemon..."
@@ -89,27 +128,37 @@ systemctl enable docker
 echo "Enabling firewalld..."
 systemctl enable firewalld
 
-### Create minimal directory structure for Coolify (assets will be downloaded at runtime)
-echo "Creating minimal directory structure for Coolify..."
-mkdir -p /var/lib/coolify/{source,ssh/{keys,mux,authorized_keys},applications,databases,backups,services,proxy/dynamic,sentinel}
-mkdir -p /data
+### Pre-download Coolify assets
+echo "Downloading Coolify assets..."
+mkdir -p /usr/share/coolify
+curl -fsSL -L https://cdn.coollabs.io/coolify/docker-compose.yml -o /usr/share/coolify/docker-compose.yml
+curl -fsSL -L https://cdn.coollabs.io/coolify/docker-compose.prod.yml -o /usr/share/coolify/docker-compose.prod.yml
+curl -fsSL -L https://cdn.coollabs.io/coolify/.env.production -o /usr/share/coolify/.env.production
+curl -fsSL -L https://cdn.coollabs.io/coolify/upgrade.sh -o /usr/share/coolify/upgrade.sh
+chmod +x /usr/share/coolify/upgrade.sh
 
 # Create symlink from /data/coolify to writable location (immutable OS compatible)
 echo "Creating symlink /data/coolify -> /var/lib/coolify..."
+mkdir -p /var/lib/coolify
+mkdir -p /data
 ln -sfn /var/lib/coolify /data/coolify
 
-# Set permissions (will be adjusted after installation)
+# Copy Coolify assets to writable data directory (immutable OS compatible)
+echo "Copying Coolify assets to /var/lib/coolify/source..."
+mkdir -p /var/lib/coolify/source
+cp /usr/share/coolify/docker-compose.yml /var/lib/coolify/source/
+cp /usr/share/coolify/docker-compose.prod.yml /var/lib/coolify/source/
+cp /usr/share/coolify/.env.production /var/lib/coolify/source/
+cp /usr/share/coolify/upgrade.sh /var/lib/coolify/source/
+chmod +x /var/lib/coolify/source/upgrade.sh
+
+### Create data directories with correct permissions
+echo "Creating Coolify data directories..."
+mkdir -p /var/lib/coolify/{source,ssh,applications,databases,backups,services,proxy,sentinel}
+mkdir -p /var/lib/coolify/ssh/{keys,mux}
+mkdir -p /var/lib/coolify/proxy/dynamic
 chown -R 9999:root /var/lib/coolify
 chmod -R 700 /data/coolify
-chmod 755 /var/lib/coolify/ssh
-chmod 755 /var/lib/coolify/ssh/authorized_keys
-
-echo "Coolify directories created. Assets will be downloaded at runtime by install-coolify."
-
-### Install Coolify installation script
-echo "Installing Coolify installation script..."
-cp /ctx/install-coolify.sh /usr/bin/install-coolify
-chmod +x /usr/bin/install-coolify
 
 ### Create startup script that skips package installation
 echo "Creating Coolify startup script..."
@@ -117,22 +166,8 @@ cat > /usr/bin/coolify-start << 'EOF'
 #!/bin/bash
 set -euo pipefail
 
-echo "=== Coolify Startup Script ==="
+echo "Starting Coolify setup..."
 date
-
-# Check if Coolify is installed
-if [ ! -f /var/lib/coolify/.installed ]; then
-    echo "Coolify is not installed."
-    echo ""
-    echo "To install Coolify, run:"
-    echo "  install-coolify"
-    echo ""
-    echo "This will download Coolify assets, generate SSH keys, and start Coolify."
-    echo "Exiting cleanly (Coolify not installed)."
-    exit 0
-fi
-
-echo "Coolify is installed. Starting services..."
 
 # Ensure Docker is running
 if ! systemctl is-active --quiet docker; then
@@ -179,14 +214,22 @@ if [ ! -L /data/coolify ]; then
     ln -sfn /var/lib/coolify /data/coolify
 fi
 
-# Verify Coolify assets are present
+# Verify Coolify assets are present (should have been copied during build)
 if [ ! -f /data/coolify/source/docker-compose.yml ]; then
-    echo "ERROR: Coolify assets not found in /data/coolify/source/"
-    echo "Coolify may not be properly installed. Try running: install-coolify"
-    exit 1
+    # Try fallback to /var/lib/coolify
+    if [ -f /var/lib/coolify/source/docker-compose.yml ]; then
+        echo "Coolify assets found in /var/lib/coolify/source, ensuring symlink..."
+        mkdir -p /data
+        ln -sfn /var/lib/coolify /data/coolify
+    else
+        echo "ERROR: Coolify assets not found. They should have been copied during build."
+        exit 1
+    fi
 fi
-
 echo "Coolify assets verified in /data/coolify/source."
+touch /data/coolify/.startup-complete
+# Ensure upgrade script is executable
+chmod +x /data/coolify/source/upgrade.sh 2>/dev/null || true
 
 # Generate environment variables if not present
 ENV_FILE="/data/coolify/source/.env"
@@ -223,7 +266,7 @@ cd /data/coolify/source
 
 echo ""
 echo "================================================"
-echo "Coolify startup complete!"
+echo "Coolify setup complete!"
 echo ""
 echo "Coolify should now be accessible at:"
 echo "  http://$(hostname -I | awk '{print $1}'):8000"
@@ -260,11 +303,5 @@ systemctl enable coolify-start.service
 
 echo "Build completed successfully!"
 echo ""
-echo "Minimal Coolify image created."
-echo ""
-echo "After booting the system:"
-echo "1. SSH into the system (port 2222)"
-echo "2. Run 'install-coolify' to download and install Coolify"
-echo "3. Coolify will auto-start on subsequent boots"
-echo ""
-echo "You can also manually run: coolify-start (checks if Coolify is installed)"
+echo "Coolify will automatically start on first boot."
+echo "You can also manually run: coolify-start"

@@ -294,6 +294,49 @@ spawn-vm rebuild="0" type="qcow2" ram="6G":
       --vsock=false --pass-ssh-key=false \
       -i ./output/**/*.{{ type }}
 
+# Install Coolify on running VM
+[group('Run Virtal Machine')]
+install-coolify:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    
+    SSH_KEY="/tmp/coolify-ssh/id_ed25519_new2"
+    
+    # Check if SSH key exists
+    if [ ! -f "$SSH_KEY" ]; then
+        echo "ERROR: SSH key not found at $SSH_KEY"
+        echo "Please generate SSH keys first or update the path in this recipe."
+        exit 1
+    fi
+    
+    # Check if VM is running (port 2222)
+    if ! ss -tunalp | grep -q ':2222'; then
+        echo "VM is not running on port 2222."
+        echo ""
+        echo "Start the VM first with:"
+        echo "  just run-vm-qcow2"
+        echo ""
+        echo "Or in background:"
+        echo "  just run-vm-qcow2 &"
+        echo "  sleep 30  # Wait for VM to boot"
+        echo "  just install-coolify"
+        exit 1
+    fi
+    
+    echo "VM detected on port 2222. Installing Coolify..."
+    echo "This will SSH into the VM and run 'install-coolify'."
+    echo "You may be prompted to accept the host key."
+    echo ""
+    
+    # SSH into VM and run install-coolify
+    ssh -i "$SSH_KEY" \
+        -p 2222 \
+        -o StrictHostKeyChecking=no \
+        -o UserKnownHostsFile=/dev/null \
+        -o LogLevel=ERROR \
+        root@localhost \
+        "install-coolify"
+
 
 # Runs shell check on all Bash scripts
 lint:
