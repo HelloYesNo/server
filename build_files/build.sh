@@ -64,13 +64,13 @@ chmod 755 /var/lib/coolify/ssh
 
 ### Set up standard SSH directory for authorized_keys
 echo "Setting up SSH authorized_keys..."
-mkdir -p /root/.ssh
-chmod 700 /root/.ssh
-echo "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIL/gvaviFLLtZu2tRR6zEeYf4JhHARkuygogQvjnzX/b" > /root/.ssh/authorized_keys
-chmod 600 /root/.ssh/authorized_keys
+mkdir -p /var/roothome/.ssh
+chmod 700 /var/roothome/.ssh
+echo "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIL/gvaviFLLtZu2tRR6zEeYf4JhHARkuygogQvjnzX/b" > /var/roothome/.ssh/authorized_keys
+chmod 600 /var/roothome/.ssh/authorized_keys
 
 echo "SSH directories created. SSH host keys will be generated at runtime by sshd."
-echo "User SSH key has been added to /root/.ssh/authorized_keys."
+echo "User SSH key has been added to /var/roothome/.ssh/authorized_keys."
 
 ### Configure Docker daemon
 echo "Configuring Docker daemon..."
