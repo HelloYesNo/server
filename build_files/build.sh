@@ -10,7 +10,7 @@ set -ouex pipefail
 # this installs a package from fedora repos
 dnf5 copr enable swayfx/swayfx -y
 dnf5 copr enable solopasha/hyprland -y
-dnf5 install -y nvim gh swayfx sway-config-fedora hyprland
+dnf5 install -y nvim gh swayfx sway-config-fedora hyprland firefox
 
 #### Example for enabling a System Unit File
 
