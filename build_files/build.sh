@@ -10,10 +10,6 @@ set -ouex pipefail
 # this installs a package from fedora repos
 dnf5 install -y lspci
 
-dnf5 install fedora-workstation-repositories -y
-dnf5 config-manager --set-enabled rpmfusion-nonfree-nvidia-driver
-dnf5 config-manager --add-repo=https://negativo17.org/repos/fedora-nvidia.repo
-
 #### Example for enabling a System Unit File
 
 systemctl enable podman.socket
