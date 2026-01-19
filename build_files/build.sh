@@ -21,7 +21,7 @@ dnf5 remove docker \
 # this installs a package from fedora repos
 dnf5 config-manager addrepo --from-repofile https://download.docker.com/linux/fedora/docker-ce.repo
 
-dnf5 install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+dnf5 install -y --allowerasing docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 
 dnf5 copr enable swayfx/swayfx -y
 dnf5 copr enable solopasha/hyprland -y
