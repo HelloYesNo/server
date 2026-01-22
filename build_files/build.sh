@@ -15,7 +15,7 @@ dnf5 install -y --allowerasing docker-ce docker-ce-cli containerd.io docker-buil
 
 dnf5 copr enable swayfx/swayfx -y
 dnf5 copr enable solopasha/hyprland -y
-dnf5 install -y nvim gh swayfx sway-config-fedora hyprland firefox just
+dnf5 install -y nvim gh swayfx sway-config-fedora hyprland firefox just NetworkManager-wifi linux-firmware iwlwifi-mvm-firmware
 
 
 #### Example for enabling a System Unit File
