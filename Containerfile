@@ -3,7 +3,7 @@ FROM scratch AS ctx
 COPY build_files /
 
 # Base Image - Universal Blue base for immutable system
-FROM quay.io/fedora/fedora-bootc:43
+FROM ghcr.io/ublue-os/ucore:stable-nvidia
 
 ### MODIFICATIONS
 ## make modifications desired in your image and install packages by modifying the build.sh script
