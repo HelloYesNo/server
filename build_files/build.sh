@@ -15,9 +15,9 @@ dnf5 install -y --allowerasing \
     docker-ce docker-ce-cli containerd.io \
     docker-buildx-plugin docker-compose-plugin \
     openssl jq \
-    nvim gh swayfx sway-config-fedora hyprland firefox just
+    nvim gh swayfx sway-config-fedora hyprland firefox just zed
 
-curl -f https://zed.dev/install.sh | sh
+#curl -f https://zed.dev/install.sh | sh
 
 #git clone https://github.com/HelloYesNo/coolify.git /var/lib/coolify
 #sh /var/lib/coolify/scripts/install.sh
