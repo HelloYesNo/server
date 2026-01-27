@@ -5,7 +5,7 @@ set -ouex pipefail
 # Add Docker Repo
 dnf5 config-manager addrepo --from-repofile https://download.docker.com/linux/fedora/docker-ce.repo
 
-dnf5 install --nogpgcheck --repofrompath 'terra,https://repos.fyralabs.com/terra$releasever' terra-release
+dnf5 install -y --nogpgcheck --repofrompath 'terra,https://repos.fyralabs.com/terra$releasever' terra-release
 
 # Enable COPR repos for your Desktop Environments
 dnf5 copr enable swayfx/swayfx -y
